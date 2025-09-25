@@ -33,8 +33,8 @@ def get_llm():
     return AzureChatOpenAI(
         azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
         api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        api_version="2024-02-01",  # Use appropriate version
-        deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini"),  # or "gpt-4o"
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01"),
+        deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
         temperature=0.1,
     )
 
@@ -48,15 +48,15 @@ def get_stock_ticker(company_name: str, llm, search_tool):
     
     # Search for ticker
     search_query = f"stock ticker symbol for {company_name}"
-    search_results = search_tool.run(search_query)
-    
-    # Use LLM to parse ticker
+    # Use a Runnable for search_results so the chain is fully Runnable
     chain = (
-        {"company_name": RunnablePassthrough(), "search_results": search_results}
+        {
+            "company_name": RunnablePassthrough(),
+            "search_results": RunnablePassthrough() | (lambda name: search_tool.run(f"stock ticker symbol for {name}"))
+        }
         | ticker_prompt
         | llm
     )
-    
     ticker = chain.invoke(company_name).content.strip()
     
     # Validate with yfinance
@@ -149,15 +149,15 @@ def run_sentiment_pipeline(company_name: str):
         
         mlflow.end_run()
         
-        # Log the full output
-        mlflow.log_dict(result.dict(), "sentiment_profile")
+    # Log the full output
+    mlflow.log_dict(result, "sentiment_profile")
         
-        return result.dict()
+    return result
 
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(description="Run sentiment pipeline for a company")
-#     parser.add_argument("--company", type=str, required=True, help="Company name (e.g., 'Microsoft')")
-#     args = parser.parse_args()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run sentiment pipeline for a company")
+    parser.add_argument("--company", type=str, required=True, help="Company name (e.g., 'Microsoft')")
+    args = parser.parse_args()
     
-#     result = run_sentiment_pipeline(args.company)
-#     print(json.dumps(result, indent=2))
+    result = run_sentiment_pipeline(args.company)
+    print(json.dumps(result, indent=2))
