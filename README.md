@@ -61,14 +61,14 @@ This repository is an assignment for analyzing market sentiment for a given comp
 2. Run all cells in order.
 3. The main function call is:
 	```python
-	run_sentiment_pipeline("Apple Inc")
+	run_sentiment_pipeline("Microsoft")
 	```
 
 ### From Terminal
 
 You can also run the pipeline from the terminal:
 ```bash
-python sentiment.py --company "Apple Inc"
+python sentiment.py --company "Microsoft"
 ```
 
 ---

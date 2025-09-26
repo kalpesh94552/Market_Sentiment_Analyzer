@@ -61,30 +61,53 @@ def get_stock_ticker(company_name: str, llm, search_tool):
     
     # Validate with yfinance
     if not ticker or not re.match(r'^[A-Z]{1,5}$', ticker):
-        raise ValueError(f"Invalid ticker extracted: {ticker}")
-    
+        raise Exception(f"The company '{company_name}' is not part of the supported ticker list or could not be found.")
+
     stock = yf.Ticker(ticker)
     if stock.info.get('symbol') != ticker:
-        raise ValueError(f"Ticker {ticker} not valid for {company_name}")
-    
+        raise Exception(f"The company '{company_name}' is not part of the supported ticker list or could not be found.")
+
     return ticker
 
 # Function to fetch and summarize news
 def fetch_news(ticker: str, news_tool):
     news_items = news_tool.run(ticker)
-    # news_items is a string, parse to list of dicts if needed; assuming it's formatted
-    # For simplicity, split by lines or use as is
+    # Robustly process news items into a summary string
+    articles = []
+    # If news_items is a string, treat as plain text
     if isinstance(news_items, str):
-        # Basic split for headlines
-        headlines = [line.strip() for line in news_items.split('\n') if line.strip()]
-    else:
-        headlines = [item.get('title', '') for item in news_items if isinstance(item, dict)]
-    
-    news_summary = " ".join(headlines[:10])  # Top 10 headlines
+        articles.append(news_items.strip())
+    # If news_items is a list, process each item
+    elif isinstance(news_items, list):
+        for item in news_items:
+            # Try to extract text or title safely
+            if isinstance(item, dict):
+                text = item.get('text') or item.get('title') or ''
+                highlights = item.get('highlights', [])
+                article_content = f"Article: {text}\nHighlights: {' '.join(highlights)}\n" if highlights else f"Article: {text}\n"
+                articles.append(article_content)
+            elif hasattr(item, 'metadata') and isinstance(item.metadata, dict):
+                text = item.metadata.get('text') or item.metadata.get('title') or ''
+                highlights = getattr(item, 'highlights', [])
+                article_content = f"Article: {text}\nHighlights: {' '.join(highlights)}\n" if highlights else f"Article: {text}\n"
+                articles.append(article_content)
+    # If news_items has 'results' attribute (like ExaSearchResults), process those
+    elif hasattr(news_items, 'results') and news_items.results:
+        for result in news_items.results:
+            text = getattr(result, 'text', '')
+            highlights = getattr(result, 'highlights', [])
+            article_content = f"Article: {text}\nHighlights: {' '.join(highlights)}\n" if highlights else f"Article: {text}\n"
+            articles.append(article_content)
+    # Join up to 10 articles for the summary
+    news_summary = "\n".join([a for a in articles if a][:10])
     return news_summary
 
 # Main pipeline function with MLflow tracing
 def run_sentiment_pipeline(company_name: str):
+    mlflow.end_run()
+    # End any active MLflow run before starting a new one
+    if mlflow.active_run() is not None:
+        mlflow.end_run()
     with mlflow.start_run(run_name=f"Sentiment Pipeline for {company_name}"):
         mlflow.log_param("input_company", company_name)
         
